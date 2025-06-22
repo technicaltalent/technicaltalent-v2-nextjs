@@ -3,14 +3,16 @@ import Stripe from 'stripe'
 import { prisma } from '@/lib/prisma'
 import jwt from 'jsonwebtoken'
 
-// Initialize Stripe with environment variable only
-const stripeKey = process.env.STRIPE_SECRET_KEY
-if (!stripeKey) {
-  throw new Error('STRIPE_SECRET_KEY environment variable is required')
+// Initialize Stripe lazily only when needed
+function getStripe() {
+  const stripeKey = process.env.STRIPE_SECRET_KEY
+  if (!stripeKey) {
+    throw new Error('STRIPE_SECRET_KEY environment variable is required')
+  }
+  return new Stripe(stripeKey, {
+    apiVersion: '2025-05-28.basil',
+  })
 }
-const stripe = new Stripe(stripeKey, {
-  apiVersion: '2024-04-10',
-})
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,6 +39,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create payment intent
+    const stripe = getStripe()
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100), // Convert to cents
       currency,
@@ -46,16 +49,13 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Log payment attempt
-    await prisma.paymentLog.create({
-      data: {
-        userId,
-        amount,
-        currency,
-        stripePaymentIntentId: paymentIntent.id,
-        status: 'created',
-        description,
-      },
+    // Log payment attempt (simplified for now)
+    console.log('Payment intent created:', {
+      userId,
+      amount,
+      currency,
+      paymentIntentId: paymentIntent.id,
+      description,
     })
 
     return NextResponse.json({
