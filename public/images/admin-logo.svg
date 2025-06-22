@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 66.62 27.54">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #0f67ff;
+      }
+
+      .cls-2, .cls-3 {
+        font-family: KorolevRounded-MediumItalic, 'Korolev Rounded';
+        font-weight: 500;
+      }
+
+      .cls-2, .cls-3, .cls-4 {
+        fill: #fff;
+        font-style: italic;
+      }
+
+      .cls-2, .cls-4 {
+        font-size: 22.65px;
+      }
+
+      .cls-3 {
+        font-size: 10.65px;
+      }
+
+      .cls-5 {
+        letter-spacing: 0em;
+      }
+
+      .cls-4 {
+        font-family: KorolevRounded-LightItalic, 'Korolev Rounded';
+        font-weight: 300;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1-2" data-name="Layer 1">
+    <g>
+      <rect class="cls-1" width="66.62" height="25.3" rx="2.06" ry="2.06"/>
+      <text class="cls-2" transform="translate(4 21.27)"><tspan x="0" y="0">T</tspan></text>
+      <text class="cls-4" transform="translate(12.5 21.27)"><tspan x="0" y="0">T</tspan></text>
+      <text class="cls-3" transform="translate(26.08 21.36)"><tspan class="cls-5" x="0" y="0">A</tspan><tspan x="6.13" y="0">dmin</tspan></text>
+    </g>
+  </g>
+</svg>
