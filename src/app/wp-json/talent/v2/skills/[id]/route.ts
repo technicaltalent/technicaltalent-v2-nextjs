@@ -106,25 +106,45 @@ export async function GET(
         const decoded: any = jwt.verify(token, process.env.NEXTAUTH_SECRET || 'development-secret-key-replace-in-production')
         const userId = decoded.user_id
 
-        // Get user's skills that are children of this parent skill
+        // Get user's skills - both the parent skill itself AND any child skills
         const userSkills = await prisma.userSkill.findMany({
           where: {
             userId: userId,
-            skill: {
-              parent: {
-                wordpressId: wordpressId
+            OR: [
+              // User has the parent skill itself
+              {
+                skill: {
+                  wordpressId: wordpressId
+                }
+              },
+              // User has child skills under this parent
+              {
+                skill: {
+                  parent: {
+                    wordpressId: wordpressId
+                  }
+                }
               }
-            }
+            ]
           },
           include: {
             skill: true
           }
         })
 
-        // Format user's current skills in this category - MOBILE APP EXPECTS JUST IDs, NOT OBJECTS!
-        userCurrentSkills = userSkills.map(userSkill => 
-          userSkill.skill.wordpressId?.toString() || userSkill.skill.id
-        )
+        console.log(`🔧 [skills/${skillId}] Found user skills for category:`, userSkills.map(us => ({ 
+          id: us.skill.id, 
+          wordpressId: us.skill.wordpressId, 
+          name: us.skill.name,
+          isParent: us.skill.parentId === null
+        })))
+
+        // Format user's current skills - MOBILE APP EXPECTS JUST IDs, NOT OBJECTS!
+        userCurrentSkills = userSkills
+          .filter(userSkill => userSkill.skill.parentId !== null) // Only include child skills, not the parent
+          .map(userSkill => userSkill.skill.wordpressId?.toString() || userSkill.skill.id)
+        
+        console.log(`🔧 [skills/${skillId}] User current child skills:`, userCurrentSkills)
 
         // Get user's current manufacturers/brands for this skill category
         if (skillMapping && skillMapping.isActive) {

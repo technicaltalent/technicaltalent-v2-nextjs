@@ -29,6 +29,7 @@ async function fixDataImportIssues() {
     // Parse all WordPress data
     const users = parseWordPressUsers(sqlContent);
     const userMeta = parseWordPressUserMeta(sqlContent);
+    const postMeta = parseWordPressPostMeta(sqlContent);
     const posts = parseWordPressPosts(sqlContent);
     const terms = parseWordPressTerms(sqlContent);
     const termTaxonomy = parseWordPressTermTaxonomy(sqlContent);
@@ -38,6 +39,7 @@ async function fixDataImportIssues() {
     console.log(`   📝 Posts: ${posts.length}`);
     console.log(`   🏷️  Terms: ${terms.length}`);
     console.log(`   📋 User Meta: ${userMeta.length}`);
+    console.log(`   📋 Post Meta: ${postMeta.length}`);
     
     // Clear existing data
     console.log('\\n🗑️  **CLEARING EXISTING DATA**');
@@ -70,9 +72,9 @@ async function fixDataImportIssues() {
     console.log('\\n🌐 **IMPORTING REAL WORDPRESS LANGUAGES**');
     await importRealWordPressLanguages(terms, termTaxonomy);
     
-    // Import jobs with CORRECT user assignments
-    console.log('\\n💼 **IMPORTING JOBS WITH CORRECT AUTHORS**');
-    await importJobsWithCorrectAuthors(posts);
+    // Import jobs with CORRECT user assignments and status
+    console.log('\\n💼 **IMPORTING JOBS WITH CORRECT AUTHORS AND STATUS**');
+    await importJobsWithCorrectAuthors(posts, postMeta);
     
     console.log('\\n✅ **DATA IMPORT FIX COMPLETE!**');
     console.log('\\n🔍 **VERIFICATION:**');
@@ -341,11 +343,20 @@ function generateLanguageCode(languageName) {
 }
 
 /**
- * Import jobs with correct author assignments
+ * Import jobs with correct author assignments and job status from metadata
  */
-async function importJobsWithCorrectAuthors(posts) {
+async function importJobsWithCorrectAuthors(posts, postMeta) {
   const jobPosts = posts.filter(post => post.post_type === 'role');
   console.log(`   💼 Found ${jobPosts.length} real job posts`);
+  
+  // Group postmeta by post ID for efficient lookup
+  const metaByPost = {};
+  postMeta.forEach(meta => {
+    if (!metaByPost[meta.post_id]) metaByPost[meta.post_id] = {};
+    metaByPost[meta.post_id][meta.meta_key] = meta.meta_value;
+  });
+  
+  console.log(`   📊 Found job_status metadata for ${Object.keys(metaByPost).filter(postId => metaByPost[postId].job_status).length} jobs`);
   
   for (const post of jobPosts) {
     try {
@@ -357,6 +368,20 @@ async function importJobsWithCorrectAuthors(posts) {
       if (!employer) {
         console.log(`   ⚠️  Skipping job ${post.post_title}: Author user_${post.post_author} not found`);
         continue;
+      }
+
+      // Get job metadata including status
+      const jobMeta = metaByPost[post.ID] || {};
+      const wordpressJobStatus = jobMeta.job_status;
+      
+      // Map WordPress job_status to v2 JobStatus enum
+      let jobStatus = 'OPEN'; // Default status
+      if (wordpressJobStatus === 'complete') {
+        jobStatus = 'COMPLETED';
+      } else if (wordpressJobStatus === 'booked') {
+        jobStatus = 'ASSIGNED';
+      } else if (wordpressJobStatus === 'publish' || !wordpressJobStatus) {
+        jobStatus = 'OPEN';
       }
       
       await prisma.job.create({
@@ -373,7 +398,7 @@ async function importJobsWithCorrectAuthors(posts) {
           }),
           payRate: 35.0,
           payType: 'HOURLY',
-          status: post.post_status === 'publish' ? 'OPEN' : 'CLOSED',
+          status: jobStatus, // Use the correct status from WordPress metadata
           paymentStatus: 'PENDING',
           notifyTalent: false,
           createdAt: new Date(post.post_date),
@@ -381,7 +406,7 @@ async function importJobsWithCorrectAuthors(posts) {
         }
       });
       
-      console.log(`   ✅ Job: ${post.post_title} → Author: user_${post.post_author} (WP ID: ${post.ID})`);
+      console.log(`   ✅ Job: ${post.post_title} → Author: user_${post.post_author} (WP ID: ${post.ID}) → Status: ${jobStatus}${wordpressJobStatus ? ` (WP: ${wordpressJobStatus})` : ''}`);
       
     } catch (error) {
       console.log(`   ⚠️  Failed to create job ${post.post_title}: ${error.message}`);
@@ -542,6 +567,70 @@ function parseUserMetaInsert(insertStatement) {
   }
   
   return userMeta;
+}
+
+/**
+ * Parse WordPress post meta (for job_status and other post metadata)
+ */
+function parseWordPressPostMeta(sqlContent) {
+  const postMeta = [];
+  
+  // Find all INSERT statements for postmeta table using line-by-line approach
+  const lines = sqlContent.split('\n');
+  let inPostMetaInsert = false;
+  let currentInsert = '';
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    if (line.includes('INSERT INTO `xVhkH_postmeta`')) {
+      inPostMetaInsert = true;
+      currentInsert = line;
+      continue;
+    }
+    
+    if (inPostMetaInsert) {
+      currentInsert += '\n' + line;
+      
+      if (line.endsWith(';')) {
+        // Process this complete INSERT statement
+        try {
+          const processed = parsePostMetaInsert(currentInsert);
+          postMeta.push(...processed);
+        } catch (error) {
+          console.log(`   ⚠️  Failed to parse postmeta insert: ${error.message}`);
+        }
+        
+        inPostMetaInsert = false;
+        currentInsert = '';
+      }
+    }
+  }
+  
+  console.log(`   📊 Parsed ${postMeta.length} post meta records from SQL`);
+  return postMeta;
+}
+
+/**
+ * Parse a single postmeta INSERT statement
+ */
+function parsePostMetaInsert(insertStatement) {
+  const postMeta = [];
+  
+  // Use the same proven regex pattern as usermeta
+  const recordPattern = /\((\d+), (\d+), '([^']*)', '([^']*)'\)/g;
+  let match;
+  
+  while ((match = recordPattern.exec(insertStatement)) !== null) {
+    postMeta.push({
+      meta_id: parseInt(match[1]),
+      post_id: parseInt(match[2]),
+      meta_key: match[3],
+      meta_value: match[4]
+    });
+  }
+  
+  return postMeta;
 }
 
 /**

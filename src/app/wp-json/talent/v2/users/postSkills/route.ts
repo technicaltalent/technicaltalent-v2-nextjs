@@ -279,19 +279,75 @@ export async function POST(request: NextRequest) {
         console.log('🔧 [postSkills] Cleared existing manufacturers for exact replacement:', deleteManufacturerResult.count)
       }
     } else {
-      console.log('🔧 [postSkills] General skill update - using additive approach')
-      // For general updates without job context, just add skills (don't replace)
+      console.log('🔧 [postSkills] General skill update - using smart duplicate-aware approach')
+      
+      // For general updates, check existing skills and only add new ones
+      if (skillIds.length > 0) {
+        const existingUserSkills = await prisma.userSkill.findMany({
+          where: { 
+            userId: userId,
+            skillId: { in: skillIds }
+          }
+        })
+        
+        const existingSkillIds = existingUserSkills.map(us => us.skillId)
+        const newSkillIds = skillIds.filter(skillId => !existingSkillIds.includes(skillId))
+        
+        console.log('🔧 [postSkills] Existing skills found:', existingSkillIds.length)
+        console.log('🔧 [postSkills] New skills to add:', newSkillIds.length)
+        
+        if (newSkillIds.length > 0) {
+          const deleteResult = await prisma.userSkill.deleteMany({
+            where: { userId: userId }
+          })
+          console.log('🔧 [postSkills] Cleared existing skills for replacement:', deleteResult.count)
+          
+          // Replace with all skills (existing + new)
+          skillIds = [...new Set([...existingSkillIds, ...newSkillIds])]
+        } else {
+          console.log('🔧 [postSkills] No new skills to add, user already has all requested skills')
+          skillIds = [] // Clear the array so we don't try to recreate existing skills
+        }
+      }
+      
+      if (manufacturerIds.length > 0) {
+        const existingUserManufacturers = await prisma.userManufacturer.findMany({
+          where: { 
+            userId: userId,
+            manufacturerId: { in: manufacturerIds }
+          }
+        })
+        
+        const existingManufacturerIds = existingUserManufacturers.map(um => um.manufacturerId)
+        const newManufacturerIds = manufacturerIds.filter(mId => !existingManufacturerIds.includes(mId))
+        
+        console.log('🔧 [postSkills] Existing manufacturers found:', existingManufacturerIds.length)
+        console.log('🔧 [postSkills] New manufacturers to add:', newManufacturerIds.length)
+        
+        if (newManufacturerIds.length > 0) {
+          const deleteResult = await prisma.userManufacturer.deleteMany({
+            where: { userId: userId }
+          })
+          console.log('🔧 [postSkills] Cleared existing manufacturers for replacement:', deleteResult.count)
+          
+          // Replace with all manufacturers (existing + new)
+          manufacturerIds = [...new Set([...existingManufacturerIds, ...newManufacturerIds])]
+        } else {
+          console.log('🔧 [postSkills] No new manufacturers to add, user already has all requested manufacturers')
+          manufacturerIds = [] // Clear the array so we don't try to recreate existing manufacturers
+        }
+      }
     }
 
-    // Add new skills
-    const userSkillsData = skillIds.map(skillId => ({
-      userId: userId,
-      skillId: skillId,
-      proficiencyLevel: 1, // Default proficiency level
-      yearsExperience: null
-    }))
+    // Add new skills (only if we have skills to add)
+    if (skillIds.length > 0) {
+      const userSkillsData = skillIds.map(skillId => ({
+        userId: userId,
+        skillId: skillId,
+        proficiencyLevel: 1, // Default proficiency level
+        yearsExperience: null
+      }))
 
-    if (userSkillsData.length > 0) {
       console.log('🔧 [postSkills] Adding new user skills:', userSkillsData.length)
       const createResult = await prisma.userSkill.createMany({
         data: userSkillsData
@@ -299,13 +355,13 @@ export async function POST(request: NextRequest) {
       console.log('🔧 [postSkills] Created new skills:', createResult.count)
     }
 
-    // Add new manufacturers
-    const userManufacturersData = manufacturerIds.map(manufacturerId => ({
-      userId: userId,
-      manufacturerId: manufacturerId
-    }))
+    // Add new manufacturers (only if we have manufacturers to add)
+    if (manufacturerIds.length > 0) {
+      const userManufacturersData = manufacturerIds.map(manufacturerId => ({
+        userId: userId,
+        manufacturerId: manufacturerId
+      }))
 
-    if (userManufacturersData.length > 0) {
       console.log('🔧 [postSkills] Adding new user manufacturers:', userManufacturersData.length)
       const createResult = await prisma.userManufacturer.createMany({
         data: userManufacturersData

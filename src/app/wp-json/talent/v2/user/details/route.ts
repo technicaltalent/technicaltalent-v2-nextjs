@@ -9,42 +9,43 @@ export async function GET(request: NextRequest) {
   try {
     // Get Authorization header
     const authHeader = request.headers.get('authorization')
-         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-       return NextResponse.json({
-         code: 'rest_forbidden',
-         message: 'Authorization header missing or invalid',
-         data: { status: 401 }
-       }, { 
-         status: 401,
-         headers: {
-           'Access-Control-Allow-Origin': '*',
-           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-         }
-       })
-     }
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({
+        code: 'rest_forbidden',
+        message: 'Authorization header missing or invalid',
+        data: { status: 401 }
+      }, { 
+        status: 401,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+      })
+    }
 
     // Extract and verify JWT token
     const token = authHeader.substring(7) // Remove 'Bearer ' prefix
-    const jwtSecret = process.env.NEXTAUTH_SECRET || 'fallback-secret'
+    const jwtSecret = process.env.NEXTAUTH_SECRET || 'development-secret-key'
     
     let decoded: any
     try {
       decoded = jwt.verify(token, jwtSecret)
-         } catch (error) {
-       return NextResponse.json({
-         code: 'rest_forbidden',
-         message: 'Invalid or expired token',
-         data: { status: 401 }
-       }, { 
-         status: 401,
-         headers: {
-           'Access-Control-Allow-Origin': '*',
-           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-         }
-       })
-     }
+    } catch (error) {
+      console.error('JWT verification failed:', error)
+      return NextResponse.json({
+        code: 'rest_forbidden',
+        message: 'Invalid or expired token',
+        data: { status: 401 }
+      }, { 
+        status: 401,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+      })
+    }
 
     // Find user by ID from token
     const user = await prisma.user.findUnique({
@@ -59,37 +60,60 @@ export async function GET(request: NextRequest) {
       }
     })
 
-         if (!user) {
-       return NextResponse.json({
-         code: 'rest_user_invalid',
-         message: 'User not found',
-         data: { status: 404 }
-       }, { 
-         status: 404,
-         headers: {
-           'Access-Control-Allow-Origin': '*',
-           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-         }
-       })
-     }
+    if (!user) {
+      return NextResponse.json({
+        code: 'rest_user_invalid',
+        message: 'User not found',
+        data: { status: 404 }
+      }, { 
+        status: 404,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+      })
+    }
 
     // Get profile data from notification settings
-    let comStep = 'final' // Default to final
+    let comStep = 'sign-in' // Default to sign-in for new users
     let notificationSettings: any = {}
     if (user.profile?.notificationSettings) {
       try {
         notificationSettings = JSON.parse(user.profile.notificationSettings)
-        comStep = notificationSettings.comStep
+        if (notificationSettings.comStep) {
+          comStep = notificationSettings.comStep
+        }
       } catch (error) {
         console.error('Error parsing notification settings:', error)
       }
     }
 
-    // If user has no com_step, they need to select talent/employer (WordPress: "sign-in" step)
-    if (comStep === undefined || comStep === null) {
-      comStep = 'sign-in'
+    // NEW LOGIC: Determine step based on profile completion, not just role existence
+    const hasSkills = user.skills && user.skills.length > 0
+    const hasLocation = user.profile?.location && user.profile.location !== null
+    const hasCompleteProfile = user.firstName && user.lastName && hasSkills && hasLocation
+    
+    // Only set to 'final' if user has completed all setup steps
+    if (hasCompleteProfile && notificationSettings.comStep === 'final') {
+      comStep = 'final'
+    } else if (hasSkills && hasLocation) {
+      comStep = 'final' // User has basic required info
+    } else if (hasSkills) {
+      comStep = 'skills' // User has skills but needs location
+    } else if (user.role && (user.role === 'TALENT' || user.role === 'EMPLOYER')) {
+      comStep = 'profile-type' // User has role but needs skills/profile setup
+    } else {
+      comStep = 'sign-in' // New user needs to select role
     }
+
+    console.log(`🔍 [user/details] Step determination for user ${user.id}:`, {
+      hasSkills,
+      hasLocation,
+      hasCompleteProfile,
+      notificationStepSetting: notificationSettings.comStep,
+      finalStep: comStep
+    })
 
     // Parse location data
     let address = null
@@ -149,21 +173,21 @@ export async function GET(request: NextRequest) {
       }
     })
 
-     } catch (error) {
-     console.error('User details error:', error)
-     return NextResponse.json({
-       code: 'rest_internal_error',
-       message: 'Internal server error',
-       data: { status: 500 }
-     }, { 
-       status: 500,
-       headers: {
-         'Access-Control-Allow-Origin': '*',
-         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-       }
-     })
-   }
+  } catch (error) {
+    console.error('User details error:', error)
+    return NextResponse.json({
+      code: 'rest_internal_error',
+      message: 'Internal server error',
+      data: { status: 500 }
+    }, { 
+      status: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    })
+  }
 }
 
 // Handle OPTIONS requests for CORS

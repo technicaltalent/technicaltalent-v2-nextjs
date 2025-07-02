@@ -135,6 +135,7 @@ model Job {
   status          JobStatus  @default(OPEN)
   startDate       DateTime?  @map("start_date")
   endDate         DateTime?  @map("end_date")
+  schedule        String?      // WordPress-compatible serialized schedule data
   paymentStatus   PaymentStatus @default(PENDING) @map("payment_status")
   notifyTalent    Boolean    @default(false) @map("notify_talent")
   selectedTalent  String?    @map("selected_talent")
@@ -142,12 +143,13 @@ model Job {
   updatedAt       DateTime   @updatedAt @map("updated_at")
 
   // Relationships
-  employer      User               @relation("EmployerJobs", fields: [employerId], references: [id])
-  applications  JobApplication[]
-  transactions  Transaction[]
-  endorsements  Endorsement[]
-  messages      Message[]
-  manufacturers JobManufacturer[]
+  employer        User               @relation("EmployerJobs", fields: [employerId], references: [id])
+  applications    JobApplication[]
+  transactions    Transaction[]
+  endorsements    Endorsement[]
+  messages        Message[]
+  manufacturers   JobManufacturer[]
+  scheduleEntries JobSchedule[]     // New: Multiple date/time entries
 
   @@map("jobs")
 }
@@ -324,6 +326,20 @@ model SkillManufacturerMapping {
 
   @@unique([skillWordpressId]) // Each skill can only map to one manufacturer category
   @@map("skill_manufacturer_mappings")
+}
+
+model JobSchedule {
+  id        String   @id @default(cuid())
+  jobId     String   @map("job_id")
+  date      String   // YYYY-MM-DD format for compatibility
+  startTime String   @map("start_time") // HH:MM format
+  endTime   String   @map("end_time")   // HH:MM format
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_schedules")
 }
 
 // Enums

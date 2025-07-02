@@ -120,7 +120,16 @@ export const dynamic = 'force-dynamic'
 
 function JobTableRow({ job }: { job: Job }) {
   const employerName = `${job.employer.firstName || ''} ${job.employer.lastName || ''}`.trim() || job.employer.email
-  const location = job.location ? JSON.parse(job.location) : null
+  
+  // Safe JSON parsing for location
+  let location = null
+  try {
+    location = job.location ? JSON.parse(job.location) : null
+  } catch (error) {
+    console.warn('Failed to parse job location JSON:', job.location, error)
+    location = { addressName: job.location || 'Invalid location data' }
+  }
+  
   const applicationsCount = job.applications.length
   const acceptedApplications = job.applications.filter(app => app.status === 'ACCEPTED').length
   
@@ -273,9 +282,17 @@ export default async function JobsPage({
 
   const totalPages = Math.ceil(totalCount / 20)
 
+  // Serialize dates to avoid JSON serialization errors
+  const serializedJobs = jobs.map(job => ({
+    ...job,
+    createdAt: job.createdAt.toISOString(),
+    startDate: job.startDate?.toISOString() || null,
+    endDate: job.endDate?.toISOString() || null
+  }))
+
   return (
     <JobsClient
-      jobs={jobs}
+      jobs={serializedJobs}
       totalCount={totalCount}
       totalStats={totalStats}
       totalPages={totalPages}

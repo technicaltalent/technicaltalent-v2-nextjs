@@ -40,12 +40,12 @@ interface Job {
   payRate: number | null
   payType: string | null
   status: string
-  startDate: Date | null
-  endDate: Date | null
+  startDate: string | null
+  endDate: string | null
   paymentStatus: string
   notifyTalent: boolean
   selectedTalent: string | null
-  createdAt: Date
+  createdAt: string
   employer: {
     firstName: string | null
     lastName: string | null
@@ -71,7 +71,16 @@ interface JobStats {
 
 function JobTableRow({ job }: { job: Job }) {
   const employerName = `${job.employer.firstName || ''} ${job.employer.lastName || ''}`.trim() || job.employer.email
-  const location = job.location ? JSON.parse(job.location) : null
+  
+  // Safe JSON parsing for location
+  let location = null
+  try {
+    location = job.location ? JSON.parse(job.location) : null
+  } catch (error) {
+    console.warn('Failed to parse job location JSON:', job.location, error)
+    location = { addressName: job.location || 'Invalid location data' }
+  }
+  
   const applicationsCount = job.applications.length
   const acceptedApplications = job.applications.filter(app => app.status === 'ACCEPTED').length
   
@@ -123,7 +132,7 @@ function JobTableRow({ job }: { job: Job }) {
       <TableCell>
         <div className="flex items-center space-x-1 text-sm text-gray-500">
           <Calendar className="h-3 w-3" />
-          <span>{job.createdAt.toLocaleDateString()}</span>
+          <span>{new Date(job.createdAt).toLocaleDateString()}</span>
         </div>
       </TableCell>
       <TableCell>

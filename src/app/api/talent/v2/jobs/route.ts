@@ -19,7 +19,13 @@ const createJobSchema = z.object({
   pay_rate: z.number().positive().optional(),
   pay_type: z.enum(['HOURLY', 'DAILY', 'FIXED']).optional(),
   start_date: z.string().datetime().optional(),
-  end_date: z.string().datetime().optional()
+  end_date: z.string().datetime().optional(),
+  // WordPress-compatible schedule format
+  dates: z.array(z.object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+    startTime: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:MM format'),
+    endTime: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:MM format')
+  })).optional()
 })
 
 // Helper function to verify JWT token
@@ -72,7 +78,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get jobs with employer details
+    // Get jobs with employer details and schedule
     const jobs = await prisma.job.findMany({
       where: whereClause,
       include: {
@@ -95,6 +101,11 @@ export async function GET(request: NextRequest) {
             status: true,
             talentId: true
           }
+        },
+        scheduleEntries: {
+          orderBy: {
+            date: 'asc'
+          }
         }
       },
       orderBy: {
@@ -108,27 +119,37 @@ export async function GET(request: NextRequest) {
     const totalJobs = await prisma.job.count({ where: whereClause })
 
     // Format response to match WordPress structure
-    const formattedJobs = jobs.map(job => ({
-      job_id: job.id,
-      title: job.title,
-      description: job.description,
-      employer: {
-        id: job.employer.id,
-        name: `${job.employer.firstName || ''} ${job.employer.lastName || ''}`.trim(),
-        email: job.employer.email,
-        profile_image: job.employer.profile?.profileImageUrl || null
-      },
-      location: job.location ? JSON.parse(job.location) : null,
-      required_skills: job.requiredSkills ? job.requiredSkills.split(',') : [],
-      pay_rate: job.payRate,
-      pay_type: job.payType?.toLowerCase(),
-      status: job.status.toLowerCase(),
-      start_date: job.startDate?.toISOString(),
-      end_date: job.endDate?.toISOString(),
-      applications_count: job.applications.length,
-      created_at: job.createdAt.toISOString(),
-      updated_at: job.updatedAt.toISOString()
-    }))
+    const formattedJobs = jobs.map(job => {
+      // Format schedule for WordPress compatibility
+      const schedule = job.scheduleEntries?.map(entry => ({
+        date: entry.date,
+        startTime: entry.startTime,
+        endTime: entry.endTime
+      })) || []
+
+      return {
+        job_id: job.id,
+        title: job.title,
+        description: job.description,
+        employer: {
+          id: job.employer.id,
+          name: `${job.employer.firstName || ''} ${job.employer.lastName || ''}`.trim(),
+          email: job.employer.email,
+          profile_image: job.employer.profile?.profileImageUrl || null
+        },
+        location: job.location ? JSON.parse(job.location) : null,
+        required_skills: job.requiredSkills ? job.requiredSkills.split(',') : [],
+        pay_rate: job.payRate,
+        pay_type: job.payType?.toLowerCase(),
+        status: job.status.toLowerCase(),
+        start_date: job.startDate?.toISOString(),
+        end_date: job.endDate?.toISOString(),
+        schedule: schedule, // WordPress-compatible schedule array
+        applications_count: job.applications.length,
+        created_at: job.createdAt.toISOString(),
+        updated_at: job.updatedAt.toISOString()
+      }
+    })
 
     // Track jobs view event
     try {

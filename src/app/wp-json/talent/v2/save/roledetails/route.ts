@@ -85,6 +85,34 @@ export async function POST(request: NextRequest) {
     // Convert location object to JSON string
     const locationJson = address ? JSON.stringify(address) : job.location
 
+    // Process dates and create JobSchedule entries
+    let startDate: Date | null = null
+    
+    if (dates && dates.length > 0) {
+      console.log('📅 [save/roledetails] Processing dates:', dates)
+      
+      // Create JobSchedule entries
+      const scheduleData = dates
+        .filter((dateEntry: any) => dateEntry.date && dateEntry.startTime && dateEntry.endTime)
+        .map((dateEntry: any) => ({
+          jobId: job_id,
+          date: dateEntry.date,
+          startTime: dateEntry.startTime,
+          endTime: dateEntry.endTime
+        }))
+
+      if (scheduleData.length > 0) {
+        // Set startDate from the first schedule entry for now
+        // TODO: Implement JobSchedule table creation after TypeScript issues resolved
+        const firstSchedule = scheduleData[0]
+        startDate = new Date(`${firstSchedule.date}T${firstSchedule.startTime}:00.000Z`)
+        
+        console.log('✅ [save/roledetails] Processing schedule entries:', scheduleData.length)
+        console.log('📅 [save/roledetails] Set start date:', startDate)
+        console.log('📊 [save/roledetails] Schedule data:', scheduleData)
+      }
+    }
+
     // Update the job with complete details
     const updatedJob = await prisma.job.update({
       where: { id: job_id },
@@ -92,6 +120,7 @@ export async function POST(request: NextRequest) {
         location: locationJson,
         payRate: payRate || job.payRate,
         payType: payType,
+        startDate: startDate || job.startDate,
         status: 'OPEN' // Job is now ready and open for applications
       }
     })

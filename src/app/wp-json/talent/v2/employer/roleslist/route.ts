@@ -120,6 +120,24 @@ export async function GET(request: NextRequest) {
         const acceptedApplications = job.applications.filter(app => app.status === 'ACCEPTED').length
         const totalApplications = job.applications.length
 
+        // Determine status message and current status for legacy compatibility
+        let status_msg = 'open'
+        let cur_status = 'Open'
+        
+        if (job.status === 'OPEN') {
+          status_msg = 'inprogress'
+          cur_status = 'In Progress'
+        } else if (job.status === 'ASSIGNED') {
+          status_msg = 'Confirmed'
+          cur_status = 'Confirmed'
+        } else if (job.status === 'COMPLETED') {
+          status_msg = 'complete'
+          cur_status = 'Complete'
+        } else if (job.status === 'CANCELLED') {
+          status_msg = 'cancelled'
+          cur_status = 'Cancelled'
+        }
+
         return {
           ID: job.id, // Legacy field
           jobs: {
@@ -137,18 +155,23 @@ export async function GET(request: NextRequest) {
           pay_type: job.payType?.toLowerCase(),
           status: job.status.toLowerCase(),
           payment_status: job.paymentStatus.toLowerCase(),
-          start_date: job.startDate?.toISOString(),
-          end_date: job.endDate?.toISOString(),
+          start_date: job.startDate?.toISOString().split('T')[0] || null, // YYYY-MM-DD format for legacy compatibility
+          end_date: job.endDate?.toISOString().split('T')[0] || null,
           applications_count: totalApplications,
           pending_applications: pendingApplications,
           accepted_applications: acceptedApplications,
           job_status: job.status !== 'CANCELLED' && job.status !== 'COMPLETED', // Legacy boolean field
           created_at: job.createdAt.toISOString(),
           updated_at: job.updatedAt.toISOString(),
-          // Legacy compatibility fields
+          // Legacy compatibility fields that frontend expects
+          talents: totalApplications, // Legacy field name for applications count
+          space: formattedAddress, // Legacy field name for location/space
+          payment: job.paymentStatus?.toLowerCase(), // Legacy payment field - should show payment status, not pay type
+          status_msg: status_msg, // Legacy status message field
+          cur_status: cur_status, // Legacy current status display field
           rate: job.payRate,
-          payment: job.payType?.toLowerCase(),
-          awarded: acceptedApplications > 0 ? 1 : 0 // Legacy field for awarded status
+          awarded: acceptedApplications > 0 ? 1 : 0, // Legacy field for awarded status
+          email: job.id // Legacy field used for action selector
         }
       }),
       total_jobs: jobs.length,
