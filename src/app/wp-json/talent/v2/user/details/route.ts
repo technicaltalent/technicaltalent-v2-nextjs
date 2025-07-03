@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
 import { PrismaClient } from '@prisma/client'
+import { verifyDualJWT } from '@/lib/jwt-utils'
 
 const prisma = new PrismaClient()
 
@@ -24,15 +24,11 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Extract and verify JWT token
+    // Extract and verify JWT token (supports both WordPress and NextAuth)
     const token = authHeader.substring(7) // Remove 'Bearer ' prefix
-    const jwtSecret = process.env.NEXTAUTH_SECRET || 'development-secret-key'
     
-    let decoded: any
-    try {
-      decoded = jwt.verify(token, jwtSecret)
-    } catch (error) {
-      console.error('JWT verification failed:', error)
+    const verificationResult = verifyDualJWT(token)
+    if (!verificationResult) {
       return NextResponse.json({
         code: 'rest_forbidden',
         message: 'Invalid or expired token',
@@ -46,6 +42,9 @@ export async function GET(request: NextRequest) {
         }
       })
     }
+
+    const decoded = verificationResult.decoded
+    console.log(`🔑 [user/details] Using ${verificationResult.tokenType} token for user: ${decoded.user_email}`)
 
     // Find user by ID from token
     const user = await prisma.user.findUnique({

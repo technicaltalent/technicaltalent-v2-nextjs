@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import jwt from 'jsonwebtoken'
+import { verifyDualJWT } from '@/lib/jwt-utils'
 
 // CORS headers for legacy app compatibility
 const corsHeaders = {
@@ -35,19 +35,18 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.substring(7)
-    const jwtSecret = process.env.NEXTAUTH_SECRET || 'development-secret-key'
     
-    let userId: string
-    try {
-      const decoded = jwt.verify(token, jwtSecret) as any
-      userId = decoded.user_id
-    } catch (error) {
+    const verificationResult = verifyDualJWT(token)
+    if (!verificationResult) {
       console.log('❌ [filter/talents] Invalid token')
       return NextResponse.json(
         { code: 401, message: 'Invalid token' },
         { status: 401, headers: corsHeaders }
       )
     }
+
+    const userId = verificationResult.decoded.user_id
+    console.log(`🔑 [filter/talents] Using ${verificationResult.tokenType} token for user: ${verificationResult.decoded.user_email}`)
 
     // Parse request body
     const body = await request.json()
