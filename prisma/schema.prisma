@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -45,9 +45,9 @@ model UserProfile {
   id                     String  @id @default(cuid())
   userId                 String  @unique @map("user_id")
   bio                    String?
-  location               String?   // JSON as text for SQLite
-  availability           String?   // JSON as text for SQLite
-  notificationSettings   String?   @map("notification_settings") // JSON as text for SQLite
+  location               Json?   // JSON object for PostgreSQL
+  availability           Json?   // JSON object for PostgreSQL  
+  notificationSettings   Json?   @map("notification_settings") // JSON object for PostgreSQL
   profileImageUrl        String? @map("profile_image_url")
   lastMsgSeen            DateTime? @map("last_msg_seen")
   smsNotifyDisable       Boolean @default(false) @map("sms_notify_disable")
@@ -128,9 +128,9 @@ model Job {
   title           String
   description     String?
   employerId      String     @map("employer_id")
-  location        String?      // JSON as text for SQLite
-  requiredSkills  String?      @map("required_skills") // JSON as text for SQLite
-  payRate         Float?   @map("pay_rate") // Changed from Decimal for SQLite
+  location        Json?      // JSON object for PostgreSQL
+  requiredSkills  Json?      @map("required_skills") // JSON object for PostgreSQL
+  payRate         Decimal?   @map("pay_rate") // Proper decimal for PostgreSQL
   payType         PayType?   @map("pay_type")
   status          JobStatus  @default(OPEN)
   startDate       DateTime?  @map("start_date")
@@ -174,7 +174,7 @@ model Transaction {
   id              String            @id @default(cuid())
   jobId           String            @map("job_id")
   payerId         String            @map("payer_id")
-  amount          Float           // Changed from Decimal for SQLite
+  amount          Decimal         // Proper decimal for PostgreSQL
   currency        String            @default("AUD")
   stripeChargeId  String?           @map("stripe_charge_id")
   status          TransactionStatus @default(PENDING)
