@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
+import { verifyDualJWT } from '@/lib/jwt-utils'
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
+
+// WordPress-compatible CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+}
 
 // WordPress-compatible GET user role endpoint
 export async function GET(request: NextRequest) {
@@ -16,35 +23,27 @@ export async function GET(request: NextRequest) {
         data: { status: 401 }
       }, { 
         status: 401,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
+        headers: corsHeaders
       })
     }
 
-    // Extract and verify JWT token
+    // Extract and verify JWT token with dual verification
     const token = authHeader.substring(7) // Remove 'Bearer ' prefix
-    const jwtSecret = process.env.NEXTAUTH_SECRET || 'fallback-secret'
     
-    let decoded: any
-    try {
-      decoded = jwt.verify(token, jwtSecret)
-    } catch (error) {
+    const verificationResult = verifyDualJWT(token)
+    if (!verificationResult) {
       return NextResponse.json({
         code: 'rest_forbidden',
         message: 'Invalid or expired token',
         data: { status: 401 }
       }, { 
         status: 401,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
+        headers: corsHeaders
       })
     }
+
+    const decoded = verificationResult.decoded
+    console.log(`🔑 [users/role GET] Using ${verificationResult.tokenType} token for user: ${decoded.user_email}`)
 
     // Find user by ID from token
     const user = await prisma.user.findUnique({
@@ -59,11 +58,7 @@ export async function GET(request: NextRequest) {
         data: { status: 404 }
       }, { 
         status: 404,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
+        headers: corsHeaders
       })
     }
 
@@ -80,11 +75,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(response, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
+      headers: corsHeaders
     })
 
   } catch (error) {
@@ -95,11 +86,7 @@ export async function GET(request: NextRequest) {
       data: { status: 500 }
     }, { 
       status: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
+      headers: corsHeaders
     })
   }
 }
@@ -116,35 +103,27 @@ export async function POST(request: NextRequest) {
         data: { status: 401 }
       }, { 
         status: 401,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
+        headers: corsHeaders
       })
     }
 
-    // Extract and verify JWT token
+    // Extract and verify JWT token with dual verification
     const token = authHeader.substring(7) // Remove 'Bearer ' prefix
-    const jwtSecret = process.env.NEXTAUTH_SECRET || 'fallback-secret'
     
-    let decoded: any
-    try {
-      decoded = jwt.verify(token, jwtSecret)
-    } catch (error) {
+    const verificationResult = verifyDualJWT(token)
+    if (!verificationResult) {
       return NextResponse.json({
         code: 'rest_forbidden',
         message: 'Invalid or expired token',
         data: { status: 401 }
       }, { 
         status: 401,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
+        headers: corsHeaders
       })
     }
+
+    const decoded = verificationResult.decoded
+    console.log(`🔑 [users/role POST] Using ${verificationResult.tokenType} token for user: ${decoded.user_email}`)
 
     // Parse request body
     const body = await request.json()
@@ -158,11 +137,7 @@ export async function POST(request: NextRequest) {
         data: { status: 400 }
       }, { 
         status: 400,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
+        headers: corsHeaders
       })
     }
 
@@ -179,11 +154,7 @@ export async function POST(request: NextRequest) {
         data: { status: 404 }
       }, { 
         status: 404,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
+        headers: corsHeaders
       })
     }
 
@@ -198,7 +169,7 @@ export async function POST(request: NextRequest) {
     // Update com_step to profile-type (matching WordPress behavior)
     if (user.profile) {
       const currentSettings = user.profile.notificationSettings ? 
-        JSON.parse(user.profile.notificationSettings) : {}
+        JSON.parse(String(user.profile.notificationSettings)) : {}
       
       const updatedSettings = {
         ...currentSettings,
@@ -225,11 +196,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(response, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
+      headers: corsHeaders
     })
 
   } catch (error) {
@@ -240,11 +207,7 @@ export async function POST(request: NextRequest) {
       data: { status: 500 }
     }, { 
       status: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
+      headers: corsHeaders
     })
   }
 }
@@ -253,10 +216,6 @@ export async function POST(request: NextRequest) {
 export async function OPTIONS(request: NextRequest) {
   return new NextResponse(null, {
     status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
+    headers: corsHeaders,
   })
 } 

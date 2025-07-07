@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import jwt from 'jsonwebtoken'
+import { verifyDualJWT } from '@/lib/jwt-utils'
+import { PrismaClient } from '@prisma/client'
 
-// CORS headers for legacy app compatibility
+const prisma = new PrismaClient()
+
+// WordPress-compatible CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -13,45 +15,57 @@ export async function OPTIONS() {
   return NextResponse.json({}, { status: 200, headers: corsHeaders })
 }
 
-async function verifyAuthToken(request: NextRequest) {
-  try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return null
-    }
-
-    const token = authHeader.substring(7)
-    const jwtSecret = process.env.NEXTAUTH_SECRET || 'development-secret-key'
-    
-    const decoded = jwt.verify(token, jwtSecret) as any
-    
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.user_id }
-    })
-
-    return user
-  } catch (error) {
-    console.error('Auth token verification failed:', error)
-    return null
-  }
-}
-
-// WordPress-compatible employer jobs list endpoint
+// WordPress-compatible employer roles list endpoint
 export async function GET(request: NextRequest) {
   try {
-    console.log('📋 [employer/roleslist] Getting employer jobs list...')
-
-    // Verify authentication
-    const user = await verifyAuthToken(request)
-    if (!user) {
-      console.log('❌ [employer/roleslist] No auth token')
-      return NextResponse.json(
-        { code: 401, message: 'Authentication required' },
-        { status: 401, headers: corsHeaders }
-      )
+    // Get Authorization header
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({
+        code: 'rest_forbidden',
+        message: 'Authorization header missing or invalid',
+        data: { status: 401 }
+      }, { 
+        status: 401,
+        headers: corsHeaders
+      })
     }
 
+    // Extract and verify JWT token with dual verification
+    const token = authHeader.substring(7) // Remove 'Bearer ' prefix
+    
+    const verificationResult = verifyDualJWT(token)
+    if (!verificationResult) {
+      return NextResponse.json({
+        code: 'rest_forbidden',
+        message: 'Invalid or expired token',
+        data: { status: 401 }
+      }, { 
+        status: 401,
+        headers: corsHeaders
+      })
+    }
+
+    const decoded = verificationResult.decoded
+    console.log(`🔑 [employer/roleslist] Using ${verificationResult.tokenType} token for user: ${decoded.user_email}`)
+
     // Only employers can access this endpoint
+    const user = await prisma.user.findUnique({
+      where: { email: decoded.user_email }
+    })
+
+    if (!user) {
+      console.log('❌ [employer/roleslist] User not found in database')
+      return NextResponse.json({
+        code: 'rest_forbidden',
+        message: 'User not found',
+        data: { status: 401 }
+      }, { 
+        status: 401,
+        headers: corsHeaders
+      })
+    }
+
     if (user.role !== 'EMPLOYER') {
       console.log('❌ [employer/roleslist] User is not an employer')
       return NextResponse.json(

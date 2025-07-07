@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { trackEvent, EVENTS } from '@/lib/analytics'
 import jwt from 'jsonwebtoken'
+import { verifyDualJWT } from '@/lib/jwt-utils'
 
 // Validation schema for posting skills - flexible for legacy app compatibility
 const postSkillsSchema = z.object({
@@ -19,6 +20,21 @@ const postSkillsSchema = z.object({
   brand_ids: z.array(z.union([z.string(), z.number()])).optional().default([])
 })
 
+// WordPress-compatible CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+}
+
+// Handle OPTIONS requests for CORS
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: corsHeaders,
+  })
+}
+
 export async function POST(request: NextRequest) {
   // Enhanced logging for mobile app debugging
   console.log('🔧 [postSkills] Request received')
@@ -26,7 +42,7 @@ export async function POST(request: NextRequest) {
   console.log('🔧 [postSkills] URL:', request.url)
   
   try {
-    // Get user from JWT token
+    // Get user from JWT token with dual verification
     const authHeader = request.headers.get('authorization')
     console.log('🔧 [postSkills] Auth header:', authHeader ? `Bearer ${authHeader.substring(7, 20)}...` : 'MISSING')
     
@@ -39,23 +55,17 @@ export async function POST(request: NextRequest) {
         },
         { 
           status: 401,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          }
+          headers: corsHeaders
         }
       )
     }
 
     const token = authHeader.substring(7)
-    const jwtSecret = process.env.NEXTAUTH_SECRET || 'development-secret-key'
     
-    let userId: string
-    try {
-      const decoded = jwt.verify(token, jwtSecret) as any
-      userId = decoded.user_id
-    } catch (error) {
+    // Use dual JWT verification for WordPress and NextAuth tokens
+    const verificationResult = verifyDualJWT(token)
+    if (!verificationResult) {
+      console.log('❌ [postSkills] Token verification failed')
       return NextResponse.json(
         {
           code: 401,
@@ -63,14 +73,14 @@ export async function POST(request: NextRequest) {
         },
         { 
           status: 401,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          }
+          headers: corsHeaders
         }
       )
     }
+
+    const decoded = verificationResult.decoded
+    const userId = decoded.user_id
+    console.log(`🔑 [postSkills] Using ${verificationResult.tokenType} token for user: ${decoded.user_email}`)
 
     let body: any
     try {
@@ -85,11 +95,7 @@ export async function POST(request: NextRequest) {
         },
         { 
           status: 400,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          }
+          headers: corsHeaders
         }
       )
     }
@@ -174,11 +180,7 @@ export async function POST(request: NextRequest) {
           },
           { 
             status: 400,
-            headers: {
-              'Access-Control-Allow-Origin': '*',
-              'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-              'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            }
+            headers: corsHeaders
           }
         )
       }
@@ -228,11 +230,7 @@ export async function POST(request: NextRequest) {
           },
           { 
             status: 400,
-            headers: {
-              'Access-Control-Allow-Origin': '*',
-              'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-              'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            }
+            headers: corsHeaders
           }
         )
       }
@@ -396,11 +394,7 @@ export async function POST(request: NextRequest) {
       },
       { 
         status: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
+        headers: corsHeaders
       }
     )
 
@@ -422,11 +416,7 @@ export async function POST(request: NextRequest) {
         },
         { 
           status: 400,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          }
+          headers: corsHeaders
         }
       )
     }
@@ -439,28 +429,8 @@ export async function POST(request: NextRequest) {
       },
       { 
         status: 500,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
+        headers: corsHeaders
       }
     )
   }
-}
-
-// Handle OPTIONS requests for CORS
-export async function OPTIONS(request: NextRequest) {
-  console.log('🔧 [postSkills] OPTIONS request received for CORS preflight')
-  console.log('🔧 [postSkills] OPTIONS URL:', request.url)
-  console.log('🔧 [postSkills] OPTIONS Headers:', Object.fromEntries(request.headers.entries()))
-  
-  return new NextResponse(null, {
-    status: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    }
-  })
 } 
