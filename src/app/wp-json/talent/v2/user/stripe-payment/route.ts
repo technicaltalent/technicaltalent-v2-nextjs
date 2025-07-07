@@ -4,10 +4,16 @@ import Stripe from 'stripe'
 import { prisma } from '@/lib/prisma'
 import { verifyDualJWT } from '@/lib/jwt-utils'
 
-// Initialize Stripe with secret key
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2025-05-28.basil'
-})
+// Lazy Stripe initialization to avoid build-time errors
+function getStripe() {
+  const stripeKey = process.env.STRIPE_SECRET_KEY
+  if (!stripeKey) {
+    throw new Error('STRIPE_SECRET_KEY environment variable is required')
+  }
+  return new Stripe(stripeKey, {
+    apiVersion: '2025-05-28.basil'
+  })
+}
 
 // WordPress-compatible CORS headers
 const corsHeaders = {
@@ -132,27 +138,28 @@ export async function POST(request: NextRequest) {
     // Convert to cents for Stripe (AUD)
     const amountInCents = Math.round(paymentAmount * 100)
 
-    // Create payment intent with Stripe
-    const paymentIntentData: Stripe.PaymentIntentCreateParams = {
-      amount: amountInCents,
-      currency: currency.toLowerCase(),
-      description: description || `Payment for job: ${job.title}`,
-      metadata: {
-        job_id: job_id,
-        employer_id: job.employerId,
-        payer_id: userId,
-        job_title: job.title,
-        ...metadata
-      }
-    }
+         // Create payment intent with Stripe
+     const stripe = getStripe()
+     const paymentIntentData: Stripe.PaymentIntentCreateParams = {
+       amount: amountInCents,
+       currency: currency.toLowerCase(),
+       description: description || `Payment for job: ${job.title}`,
+       metadata: {
+         job_id: job_id,
+         employer_id: job.employerId,
+         payer_id: userId,
+         job_title: job.title,
+         ...metadata
+       }
+     }
 
-    // Add payment method if provided
-    if (payment_method_id) {
-      paymentIntentData.payment_method = payment_method_id
-      paymentIntentData.confirm = true // Auto-confirm if payment method provided
-    }
+     // Add payment method if provided
+     if (payment_method_id) {
+       paymentIntentData.payment_method = payment_method_id
+       paymentIntentData.confirm = true // Auto-confirm if payment method provided
+     }
 
-    const paymentIntent = await stripe.paymentIntents.create(paymentIntentData)
+     const paymentIntent = await stripe.paymentIntents.create(paymentIntentData)
 
     // Create transaction record
     const transaction = await prisma.transaction.create({
