@@ -114,13 +114,19 @@ export async function GET(request: NextRequest) {
       finalStep: comStep
     })
 
-    // Parse location data
-    let address = null
+    // Parse location data for iOS ProfileModel compatibility
+    let address = {}
     if (user.profile?.location) {
       try {
-        address = JSON.parse(String(user.profile.location))
+        const locationData = JSON.parse(String(user.profile.location))
+        address = {
+          formatted_address: locationData.formatted_address || '',
+          place_id: locationData.place_id || ''
+        }
       } catch (error) {
         console.error('Error parsing location:', error)
+        // iOS ProfileModel expects an empty object, not null
+        address = {}
       }
     }
 
@@ -164,9 +170,9 @@ export async function GET(request: NextRequest) {
         user_status: user.status ? [String(user.status)] : [] // ✅ iOS app expects array format
       },
       profile_meta: {
-        tal_rate: notificationSettings.payRate ? [notificationSettings.payRate] : [],
-        payment_model: notificationSettings.payModel ? [notificationSettings.payModel] : [],
-        short_bio: user.profile?.bio ? [user.profile.bio] : []
+        tal_rate: notificationSettings.payRate ? [String(notificationSettings.payRate)] : [],
+        payment_model: notificationSettings.payModel ? [String(notificationSettings.payModel)] : [],
+        short_bio: user.profile?.bio ? [String(user.profile.bio)] : []
       },
       // ✅ Add user_token object for iOS app compatibility
       user_token: {
@@ -184,7 +190,17 @@ export async function GET(request: NextRequest) {
       userRole: String(user.role),
       hasUserToken: !!response.user_token,
       responseKeys: Object.keys(response),
-      responseCode: response.code // iOS app specifically looks for this
+      responseCode: response.code, // iOS app specifically looks for this
+      addressStructure: {
+        hasAddress: !!response.address,
+        addressKeys: response.address ? Object.keys(response.address) : [],
+        addressEmpty: response.address && Object.keys(response.address).length === 0
+      },
+      profileMetaStructure: {
+        hasPayRate: response.profile_meta.tal_rate.length > 0,
+        hasPayModel: response.profile_meta.payment_model.length > 0,
+        hasBio: response.profile_meta.short_bio.length > 0
+      }
     })
 
     // Critical debug: Log the exact JSON the iOS app will receive
