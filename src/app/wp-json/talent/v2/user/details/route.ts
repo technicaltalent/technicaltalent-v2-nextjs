@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
     let notificationSettings: any = {}
     if (user.profile?.notificationSettings) {
       try {
-        notificationSettings = JSON.parse(user.profile.notificationSettings)
+        notificationSettings = JSON.parse(String(user.profile.notificationSettings))
         if (notificationSettings.comStep) {
           comStep = notificationSettings.comStep
         }
@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
     let address = null
     if (user.profile?.location) {
       try {
-        address = JSON.parse(user.profile.location)
+        address = JSON.parse(String(user.profile.location))
       } catch (error) {
         console.error('Error parsing location:', error)
       }
@@ -154,7 +154,9 @@ export async function GET(request: NextRequest) {
       first_jobid: null,
       // Legacy ProfileDetail component expects these fields at root level
       spoken_lang: notificationSettings.spokenLanguages || [],
-      address: address,
+      address: address || {}, // ✅ iOS app expects empty object when no address
+      // ✅ CRITICAL: iOS app ProfileModel expects short_bio at root level
+      short_bio: user.profile?.bio || '',
       usermeta: {
         first_name: [user.firstName || ''],
         last_name: [user.lastName || ''],

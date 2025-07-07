@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { prisma } from '@/lib/prisma'
-import jwt from 'jsonwebtoken'
+import { PrismaClient } from '@prisma/client'
+import { verifyDualJWT } from '@/lib/jwt-utils'
 
-// CORS headers for legacy app compatibility
+const prisma = new PrismaClient()
+
+// WordPress-compatible CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
-// Handle preflight requests
-export async function OPTIONS(req: NextRequest) {
-  return new NextResponse(null, { status: 200, headers: corsHeaders })
+// Handle OPTIONS requests for CORS
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: corsHeaders,
+  })
 }
 
 // Validation schema for address update - more flexible for legacy compatibility
@@ -41,34 +46,35 @@ const addressUpdateSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    // Get user from JWT token
+    // Get user from JWT token with dual verification
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        {
-          code: 401,
-          message: 'Authentication required'
-        },
-        { status: 401, headers: corsHeaders }
-      )
+      return NextResponse.json({
+        code: 401,
+        message: 'Authentication required'
+      }, { 
+        status: 401,
+        headers: corsHeaders
+      })
     }
 
     const token = authHeader.substring(7)
-    const jwtSecret = process.env.NEXTAUTH_SECRET || 'development-secret-key'
     
-    let userId: string
-    try {
-      const decoded = jwt.verify(token, jwtSecret) as any
-      userId = decoded.user_id
-    } catch (error) {
-      return NextResponse.json(
-        {
-          code: 401,
-          message: 'Invalid token'
-        },
-        { status: 401, headers: corsHeaders }
-      )
+    // Use dual JWT verification for WordPress and NextAuth tokens
+    const verificationResult = verifyDualJWT(token)
+    if (!verificationResult) {
+      return NextResponse.json({
+        code: 401,
+        message: 'Invalid token'
+      }, { 
+        status: 401,
+        headers: corsHeaders
+      })
     }
+
+    const decoded = verificationResult.decoded
+    const userId = decoded.user_id
+    console.log(`🔑 [users/address] Using ${verificationResult.tokenType} token for user: ${decoded.user_email}`)
 
     const body = await request.json()
     console.log('📝 [users/address] Request body:', body)
@@ -105,7 +111,7 @@ export async function POST(request: NextRequest) {
     let notificationSettings: any = {}
     if (user.profile?.notificationSettings) {
       try {
-        notificationSettings = JSON.parse(user.profile.notificationSettings)
+        notificationSettings = JSON.parse(String(user.profile.notificationSettings))
       } catch (e) {
         console.error('Error parsing notification settings:', e)
       }

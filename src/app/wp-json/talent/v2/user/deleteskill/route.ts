@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
-import { PrismaClient } from '@prisma/client'
 import { z } from 'zod'
+import { PrismaClient } from '@prisma/client'
+import { verifyDualJWT } from '@/lib/jwt-utils'
 
 const prisma = new PrismaClient()
 
@@ -18,55 +18,46 @@ const deleteSkillSchema = z.object({
   job_id: z.union([z.string(), z.number()]).optional(),
 })
 
-// Verify auth token helper
-async function verifyAuthToken(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null
-  }
-
-  const token = authHeader.substring(7)
-  const jwtSecret = process.env.NEXTAUTH_SECRET || 'fallback-secret'
-  
-  try {
-    const decoded = jwt.verify(token, jwtSecret) as any
-    
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.user_id },
-      include: { profile: true }
-    })
-
-    return user
-  } catch (error) {
-    console.error('Token verification error:', error)
-    return null
-  }
+// Handle OPTIONS requests for CORS
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 200,
+    headers: corsHeaders,
+  })
 }
 
+// WordPress-compatible delete skill endpoint
 export async function POST(request: NextRequest) {
   try {
-    console.log('🗑️ [deleteskill] Delete skill request received')
-    console.log('🗑️ [deleteskill] Request headers:', Object.fromEntries(request.headers.entries()))
-    console.log('🗑️ [deleteskill] Request URL:', request.url)
-    
-    // Verify authentication
+    // Get user from JWT token with dual verification
     const authHeader = request.headers.get('authorization')
-    console.log('🗑️ [deleteskill] Auth header received:', authHeader ? 'Bearer token present' : 'No auth header')
-    
-    const user = await verifyAuthToken(request)
-    if (!user) {
-      console.log('🗑️ [deleteskill] Authentication failed - no valid user found')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({
         code: 401,
-        message: 'Authentication required',
-        data: null
+        message: 'Authentication required'
       }, { 
-        status: 401, 
-        headers: corsHeaders 
+        status: 401,
+        headers: corsHeaders
       })
     }
 
-    console.log('🗑️ [deleteskill] User authenticated:', user.email)
+    const token = authHeader.substring(7)
+    
+    // Use dual JWT verification for WordPress and NextAuth tokens
+    const verificationResult = verifyDualJWT(token)
+    if (!verificationResult) {
+      return NextResponse.json({
+        code: 401,
+        message: 'Invalid token'
+      }, { 
+        status: 401,
+        headers: corsHeaders
+      })
+    }
+
+    const decoded = verificationResult.decoded
+    const userId = decoded.user_id
+    console.log(`🔑 [user/deleteskill] Using ${verificationResult.tokenType} token for user: ${decoded.user_email}`)
 
     // Parse request body
     const body = await request.json()
@@ -75,7 +66,7 @@ export async function POST(request: NextRequest) {
     const validatedData = deleteSkillSchema.parse(body)
     const { skillid, job_id } = validatedData
 
-    console.log('🗑️ [deleteskill] Deleting skill:', { skillid, job_id, userId: user.id })
+    console.log('🗑️ [deleteskill] Deleting skill:', { skillid, job_id, userId: userId })
 
     // Convert skillid to number for WordPress compatibility
     const skillWordpressId = parseInt(String(skillid))
@@ -115,7 +106,7 @@ export async function POST(request: NextRequest) {
     // Delete the user's skill assignment
     const deleteResult = await prisma.userSkill.deleteMany({
       where: {
-        userId: user.id,
+        userId: userId,
         skillId: skill.id
       }
     })
@@ -141,7 +132,7 @@ export async function POST(request: NextRequest) {
       data: {
         skill_id: skillWordpressId,
         skill_name: skill.name,
-        user_id: user.id,
+        user_id: userId,
         job_id: job_id || null,
         deleted_count: deleteResult.count
       }
@@ -177,10 +168,4 @@ export async function POST(request: NextRequest) {
       headers: corsHeaders 
     })
   }
-}
-
-// Handle OPTIONS for CORS
-export async function OPTIONS() {
-  console.log('🗑️ [deleteskill] OPTIONS request received for CORS preflight')
-  return NextResponse.json({}, { headers: corsHeaders })
 } 
