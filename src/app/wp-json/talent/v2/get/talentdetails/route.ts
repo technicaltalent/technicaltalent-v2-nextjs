@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
 import { PrismaClient } from '@prisma/client'
+import { verifyDualJWT } from '@/lib/jwt-utils'
 
 const prisma = new PrismaClient()
 
@@ -11,18 +11,23 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
-// Verify auth token helper
+// Verify auth token helper (supports both WordPress and NextAuth)
 async function verifyAuthToken(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null
   }
 
-  const token = authHeader.substring(7)
-  const jwtSecret = process.env.NEXTAUTH_SECRET || 'fallback-secret'
-  
   try {
-    const decoded = jwt.verify(token, jwtSecret) as any
+    const token = authHeader.substring(7)
+    
+    const verificationResult = verifyDualJWT(token)
+    if (!verificationResult) {
+      return null
+    }
+
+    const decoded = verificationResult.decoded
+    console.log(`🔑 [get/talentdetails] Using ${verificationResult.tokenType} token for user: ${decoded.user_email}`)
     
     const user = await prisma.user.findUnique({
       where: { id: decoded.user_id },
@@ -31,7 +36,7 @@ async function verifyAuthToken(request: NextRequest) {
 
     return user
   } catch (error) {
-    console.error('Token verification error:', error)
+    console.error('❌ [get/talentdetails] Token verification error:', error)
     return null
   }
 }
