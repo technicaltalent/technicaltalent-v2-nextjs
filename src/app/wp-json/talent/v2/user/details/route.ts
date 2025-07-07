@@ -135,6 +135,7 @@ export async function GET(request: NextRequest) {
 
     // Return WordPress-compatible response format with full profile data
     const response = {
+      code: 200, // ✅ CRITICAL: iOS app needs this for navigation logic
       step: comStep,
       userinfo: {
         ID: user.id,
@@ -149,13 +150,16 @@ export async function GET(request: NextRequest) {
           display_name: user.email
         }
       },
+      // iOS app expects this for job management
+      first_jobid: null,
       // Legacy ProfileDetail component expects these fields at root level
       spoken_lang: notificationSettings.spokenLanguages || [],
       address: address,
       usermeta: {
         first_name: [user.firstName || ''],
         last_name: [user.lastName || ''],
-        phone_number: user.phone ? [user.phone] : []
+        phone_number: user.phone ? [user.phone] : [],
+        user_status: user.status ? [user.status] : [] // ✅ iOS app expects array format
       },
       profile_meta: {
         tal_rate: notificationSettings.payRate ? [notificationSettings.payRate] : [],
