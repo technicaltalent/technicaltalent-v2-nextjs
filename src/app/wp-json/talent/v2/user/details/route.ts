@@ -193,6 +193,15 @@ export async function GET(request: NextRequest) {
       userStatus: response.usermeta.user_status || ''
     }, null, 2))
 
+    // Debug: iOS app navigation requirements
+    console.log('🚀 [user/details] iOS navigation check:', {
+      codeIs200: response.code === 200,
+      stepIsFinal: response.step === 'final',
+      roleIsTalent: response.userinfo.roles[0] === 'talent',
+      userStatusNotDisabled: response.usermeta.user_status[0] !== 'Disabled',
+      shouldNavigateToHome: response.code === 200 && response.step === 'final' && response.userinfo.roles[0] === 'talent'
+    })
+
     return NextResponse.json(response, {
       headers: {
         'Access-Control-Allow-Origin': '*',
