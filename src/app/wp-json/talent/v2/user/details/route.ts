@@ -7,6 +7,14 @@ const prisma = new PrismaClient()
 // WordPress-compatible user details endpoint
 export async function GET(request: NextRequest) {
   try {
+    // Track API call sequence for login flow debugging
+    const callTimestamp = Date.now()
+    const userAgent = request.headers.get('user-agent') || 'unknown'
+    const referer = request.headers.get('referer') || 'direct'
+    console.log(`🔢 [user/details] Call at ${new Date().toISOString()}`)
+    console.log(`📱 [user/details] User-Agent: ${userAgent}`)
+    console.log(`🔗 [user/details] Referer: ${referer}`)
+    
     // Get Authorization header
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -228,6 +236,9 @@ export async function GET(request: NextRequest) {
 
     // Show timestamp for login flow tracking
     console.log('🕐 [LOGIN DEBUG] Response generated at:', new Date().toISOString())
+
+    // Final marker for call sequence tracking
+    console.log('✅ [user/details] Response sent successfully - if this is the 3rd call, HomePageNavigation loaded')
 
     // Critical debug: Log the exact JSON the iOS app will receive
     console.log('📱 [user/details] Exact JSON response for iOS parsing:', JSON.stringify({
