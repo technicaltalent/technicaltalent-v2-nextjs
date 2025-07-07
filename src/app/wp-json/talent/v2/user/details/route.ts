@@ -161,6 +161,13 @@ export async function GET(request: NextRequest) {
         tal_rate: notificationSettings.payRate ? [notificationSettings.payRate] : [],
         payment_model: notificationSettings.payModel ? [notificationSettings.payModel] : [],
         short_bio: user.profile?.bio ? [user.profile.bio] : []
+      },
+      // ✅ Add user_token object for iOS app compatibility
+      user_token: {
+        token: token,
+        user_id: user.id,
+        user_email: user.email,
+        user_role: user.role.toLowerCase()
       }
     }
 
