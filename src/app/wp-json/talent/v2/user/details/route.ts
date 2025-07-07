@@ -194,14 +194,40 @@ export async function GET(request: NextRequest) {
       addressStructure: {
         hasAddress: !!response.address,
         addressKeys: response.address ? Object.keys(response.address) : [],
-        addressEmpty: response.address && Object.keys(response.address).length === 0
+        addressEmpty: !response.address || Object.keys(response.address).length === 0
       },
       profileMetaStructure: {
-        hasPayRate: response.profile_meta.tal_rate.length > 0,
-        hasPayModel: response.profile_meta.payment_model.length > 0,
-        hasBio: response.profile_meta.short_bio.length > 0
+        hasPayRate: !!response.profile_meta?.tal_rate?.length,
+        hasPayModel: !!response.profile_meta?.payment_model?.length,
+        hasBio: !!response.profile_meta?.short_bio?.length
       }
     })
+
+    // ENHANCED iOS LOGIN DEBUGGING - Track exact values for conditional logic
+    console.log('🐛 [LOGIN DEBUG] iOS checkStepForRegisterProcess values:', {
+      exactStep: JSON.stringify(response.step),
+      exactRoles: JSON.stringify(response.userinfo.roles),
+      exactUserStatus: JSON.stringify(response.usermeta?.user_status),
+      stepEqualsString: response.step === "final",
+      stepEqualsStringQuoted: response.step === '"final"',
+      rolesFirstElement: response.userinfo.roles[0],
+      rolesFirstEqualsString: response.userinfo.roles[0] === "talent",
+      userStatusFirst: response.usermeta?.user_status?.[0],
+      userStatusNotDisabled: response.usermeta?.user_status?.[0] !== "Disabled",
+      wouldNavigateConditions: {
+        stepFinal: response.step === "final",
+        rolesTalent: response.userinfo.roles[0] === "talent",
+        statusActive: response.usermeta?.user_status?.[0] !== "Disabled",
+        allConditionsMet: (
+          response.step === "final" && 
+          response.userinfo.roles[0] === "talent" && 
+          response.usermeta?.user_status?.[0] !== "Disabled"
+        )
+      }
+    })
+
+    // Show timestamp for login flow tracking
+    console.log('🕐 [LOGIN DEBUG] Response generated at:', new Date().toISOString())
 
     // Critical debug: Log the exact JSON the iOS app will receive
     console.log('📱 [user/details] Exact JSON response for iOS parsing:', JSON.stringify({
