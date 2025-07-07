@@ -79,8 +79,8 @@ export async function POST(request: NextRequest) {
        })
      }
 
-    // Generate JWT token
-    const jwtSecret = process.env.NEXTAUTH_SECRET || 'fallback-secret'
+    // Generate JWT token using WordPress secret for compatibility
+    const jwtSecret = process.env.WORDPRESS_JWT_SECRET || 'fallback-secret'
     const token = jwt.sign(
       {
         user_id: user.id,
