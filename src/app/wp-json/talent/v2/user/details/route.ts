@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
 
     // Return WordPress-compatible response format with full profile data
     const response = {
-      code: 200, // ✅ CRITICAL: iOS app needs this for navigation logic
+      code: 200, // ✅ CRITICAL: iOS app needs this as NUMBER for navigation logic
       step: comStep,
       userinfo: {
         ID: user.id,
@@ -187,10 +187,10 @@ export async function GET(request: NextRequest) {
 
     // Critical debug: Log the exact JSON the iOS app will receive
     console.log('📱 [user/details] Exact JSON response for iOS parsing:', JSON.stringify({
-      code: String(response.code),
-      step: String(response.step),
-      roles: String(response.userinfo.roles[0] || ''),
-      userStatus: String(response.usermeta.user_status || '')
+      code: response.code, // Keep as number for iOS app
+      step: response.step,
+      roles: response.userinfo.roles[0] || '',
+      userStatus: response.usermeta.user_status || ''
     }, null, 2))
 
     return NextResponse.json(response, {
