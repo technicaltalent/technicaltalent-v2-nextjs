@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import jwt from 'jsonwebtoken'
 import { prisma } from '@/lib/prisma'
+import { verifyDualJWT } from '@/lib/jwt-utils'
 
 // Validation schema for role update
 const updateRoleSchema = z.object({
@@ -10,7 +11,7 @@ const updateRoleSchema = z.object({
   })
 })
 
-// Helper function to verify JWT token
+// Helper function to verify JWT token (supports both WordPress and NextAuth)
 async function verifyAuthToken(request: NextRequest) {
   const authHeader = request.headers.get('Authorization')
   
@@ -19,14 +20,14 @@ async function verifyAuthToken(request: NextRequest) {
   }
 
   const token = authHeader.substring(7) // Remove 'Bearer ' prefix
-  const jwtSecret = process.env.NEXTAUTH_SECRET || 'development-secret-key'
   
-  try {
-    const decoded = jwt.verify(token, jwtSecret) as any
-    return decoded
-  } catch (error) {
+  const verificationResult = verifyDualJWT(token)
+  if (!verificationResult) {
     throw new Error('Invalid or expired token')
   }
+  
+  console.log(`🔑 [update-role] Using ${verificationResult.tokenType} token for user: ${verificationResult.decoded.user_email}`)
+  return verificationResult.decoded
 }
 
 export async function PUT(request: NextRequest) {
