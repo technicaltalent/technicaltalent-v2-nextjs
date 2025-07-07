@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import jwt from 'jsonwebtoken'
+import { verifyDualJWT } from '@/lib/jwt-utils'
 
 // CORS headers for legacy app compatibility
 const corsHeaders = {
@@ -40,7 +40,7 @@ const userDetailsUpdateSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    // Get user from JWT token
+    // Get user from JWT token using dual verification
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -53,13 +53,11 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.substring(7)
-    const jwtSecret = process.env.NEXTAUTH_SECRET || 'development-secret-key'
     
-    let userId: string
-    try {
-      const decoded = jwt.verify(token, jwtSecret) as any
-      userId = decoded.user_id
-    } catch (error) {
+    // Use dual JWT verification for WordPress and NextAuth tokens
+    const verificationResult = verifyDualJWT(token)
+    
+    if (!verificationResult?.success) {
       return NextResponse.json(
         {
           code: 401,
@@ -68,6 +66,9 @@ export async function POST(request: NextRequest) {
         { status: 401, headers: corsHeaders }
       )
     }
+
+    const { decoded } = verificationResult
+    const userId = decoded.user_id
 
     const body = await request.json()
     console.log('📝 [update/userdetails] Request body:', body)
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
 
     // Update user phone number if provided
     const userUpdateData: any = {}
-    if (finalPhone) {
+    if (finalPhone && typeof finalPhone === 'string') {
       userUpdateData.phone = finalPhone
     }
 
@@ -135,11 +136,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Handle spoken languages - store in notification settings
-    if (spoken_lang && spoken_lang.length > 0) {
+    if (finalSpokenLang && finalSpokenLang.length > 0) {
       // Find languages by WordPress ID to get names
       const languages = await prisma.language.findMany({
         where: {
-          wordpressId: { in: spoken_lang }
+          wordpressId: { in: finalSpokenLang }
         }
       })
 
