@@ -158,8 +158,8 @@ export async function GET(request: NextRequest) {
       usermeta: {
         first_name: [user.firstName || ''],
         last_name: [user.lastName || ''],
-        phone_number: user.phone ? [user.phone] : [],
-        user_status: user.status ? [user.status] : [] // ✅ iOS app expects array format
+        phone_number: user.phone ? [String(user.phone)] : [],
+        user_status: user.status ? [String(user.status)] : [] // ✅ iOS app expects array format
       },
       profile_meta: {
         tal_rate: notificationSettings.payRate ? [notificationSettings.payRate] : [],
@@ -181,8 +181,17 @@ export async function GET(request: NextRequest) {
       userRoles: response.userinfo.roles,
       userRole: String(user.role),
       hasUserToken: !!response.user_token,
-      responseKeys: Object.keys(response)
+      responseKeys: Object.keys(response),
+      responseCode: response.code // iOS app specifically looks for this
     })
+
+    // Critical debug: Log the exact JSON the iOS app will receive
+    console.log('📱 [user/details] Exact JSON response for iOS parsing:', JSON.stringify({
+      code: String(response.code),
+      step: String(response.step),
+      roles: String(response.userinfo.roles[0] || ''),
+      userStatus: String(response.usermeta.user_status || '')
+    }, null, 2))
 
     return NextResponse.json(response, {
       headers: {
