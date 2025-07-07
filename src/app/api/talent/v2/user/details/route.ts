@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import jwt from 'jsonwebtoken'
+import { verifyDualJWT } from '@/lib/jwt-utils'
 
 // Standard WordPress-compatible response format
 const createResponse = (code: number, message: string, data: any = null) => {
@@ -9,15 +9,23 @@ const createResponse = (code: number, message: string, data: any = null) => {
   return response
 }
 
-// Extract user from JWT token
-const getUserFromToken = async (authHeader: string | null) => {
+// Extract user from JWT token using dual verification
+const getUserFromToken = async (authHeader: string | null): Promise<{ user: any; token: string } | null> => {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null
   }
 
   try {
     const token = authHeader.substring(7)
-    const decoded = jwt.verify(token, process.env.NEXTAUTH_SECRET || 'development-secret-key') as any
+    
+    // Use dual JWT verification for WordPress and NextAuth tokens
+    const verificationResult = verifyDualJWT(token)
+    
+    if (!verificationResult?.success) {
+      return null
+    }
+
+    const { decoded } = verificationResult
     
     const user = await prisma.user.findUnique({
       where: { id: decoded.user_id },
@@ -31,8 +39,13 @@ const getUserFromToken = async (authHeader: string | null) => {
       }
     })
 
-    return user
+    if (!user) {
+      return null
+    }
+
+    return { user, token }
   } catch (error) {
+    console.error('❌ [JWT] Token verification error:', error)
     return null
   }
 }
@@ -40,14 +53,18 @@ const getUserFromToken = async (authHeader: string | null) => {
 export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization')
-    const user = await getUserFromToken(authHeader)
+    const result = await getUserFromToken(authHeader)
 
-    if (!user) {
+    if (!result) {
       return NextResponse.json(
         createResponse(401, 'Authentication required'),
         { status: 401 }
       )
     }
+
+    const { user, token } = result
+
+    console.log(`🔑 [user/details] Using nextauth token for user: ${user.email}`)
 
     // WordPress-compatible user info format
     const userinfo = {
@@ -71,7 +88,7 @@ export async function GET(req: NextRequest) {
       business_name: '', // Not in current schema
       abn_number: '', // Not in current schema
       website_url: '', // Not in current schema
-      skills: user.skills.map(userSkill => ({
+      skills: user.skills.map((userSkill: any) => ({
         id: userSkill.skill.id,
         name: userSkill.skill.name,
         level: userSkill.proficiencyLevel
@@ -79,6 +96,11 @@ export async function GET(req: NextRequest) {
     }
 
     // Determine completion step (WordPress compatibility)
+    const hasSkills = user.skills.length > 0
+    const hasLocation = user.profile?.location != null
+    const hasCompleteProfile = !!(user.firstName && user.lastName && user.phone)
+    const notificationStepSetting = 'final' // Default to final
+    
     let step = 'final'
     
     // Check if profile is incomplete
@@ -88,6 +110,25 @@ export async function GET(req: NextRequest) {
       step = 'skills'
     }
 
+    // Debug logging for step determination
+    console.log(`🔍 [user/details] Step determination for user ${user.id}:`, {
+      hasSkills,
+      hasLocation,
+      hasCompleteProfile,
+      notificationStepSetting,
+      finalStep: step
+    })
+
+    // Debug phone number array format
+    const phoneArray = user.phone ? [user.phone] : []
+    console.log(`📞 [user/details] Phone number debug:`, {
+      userPhone: user.phone,
+      phoneArray,
+      payRate: user.profile?.payRate || '',
+      payModel: user.profile?.payModel || '',
+      bio: user.profile?.bio || ''
+    })
+
     return NextResponse.json({
       code: 200,
       message: 'User details retrieved successfully',
@@ -95,6 +136,13 @@ export async function GET(req: NextRequest) {
       step,
       data: {
         user: userinfo
+      },
+      // ✅ Add user_token object for iOS app compatibility
+      user_token: {
+        token: token,
+        user_id: user.id,
+        user_email: user.email,
+        user_role: user.role.toLowerCase()
       }
     })
 
