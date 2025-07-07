@@ -171,6 +171,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Debug logging - show exact response for iOS app troubleshooting
+    console.log('📱 [user/details] iOS app response debug:', {
+      step: String(response.step),
+      userRoles: response.userinfo.roles,
+      userRole: String(user.role),
+      hasUserToken: !!response.user_token,
+      responseKeys: Object.keys(response)
+    })
+
     return NextResponse.json(response, {
       headers: {
         'Access-Control-Allow-Origin': '*',
